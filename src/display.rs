@@ -2,13 +2,13 @@
 use crate::command::Command;
 use display_interface::{DataFormat::U8, DisplayError, WriteOnlyDataCommand};
 use embedded_graphics::{
-    drawable::Pixel,
     pixelcolor::{Gray4, GrayColor},
-    prelude::Size,
-    DrawTarget,
+    Pixel,
+    prelude::{Size, OriginDimensions},
+    draw_target::DrawTarget,
 };
-use embedded_hal::blocking::delay::DelayMs;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::delay::DelayNs;
+use embedded_hal::digital::OutputPin;
 
 const DISPLAY_WIDTH: usize = 128;
 const DISPLAY_HEIGHT: usize = 128;
@@ -41,16 +41,16 @@ impl<DI: WriteOnlyDataCommand> Ssd1327<DI> {
     ) -> Result<(), DisplayError>
     where
         RST: OutputPin,
-        DELAY: DelayMs<u8>,
+        DELAY: DelayNs,
     {
         rst.set_high().map_err(|_| DisplayError::BusWriteError)?;
-        delay.delay_ms(100);
+        delay.delay_ns(100_000_000);
 
         rst.set_low().map_err(|_| DisplayError::BusWriteError)?;
-        delay.delay_ms(100);
+        delay.delay_ns(100_000_000);
 
         rst.set_high().map_err(|_| DisplayError::BusWriteError)?;
-        delay.delay_ms(100);
+        delay.delay_ns(100_000_000);
 
         Ok(())
     }
@@ -90,19 +90,26 @@ impl<DI: WriteOnlyDataCommand> Ssd1327<DI> {
     }
 }
 
-impl<DI> DrawTarget<Gray4> for Ssd1327<DI> {
+impl<DI> DrawTarget for Ssd1327<DI> {
     type Error = DisplayError;
+    type Color = Gray4;
 
-    fn draw_pixel(&mut self, pixel: Pixel<Gray4>) -> Result<(), Self::Error> {
-        let Pixel(point, color) = pixel;
-
-        let idx = (point.x / 2 + point.y * 64) as usize;
-        if point.x % 2 == 0 {
-            self.buffer[idx] = update_upper_half(self.buffer[idx], color.luma());
-        } else {
-            self.buffer[idx] = update_lower_half(self.buffer[idx], color.luma());
+    // fn draw_pixel(&mut self, pixel: Pixel<Gray4>) -> Result<(), Self::Error> {
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+        where I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        for Pixel(coord, color) in pixels.into_iter() {
+            let index = ((coord.x / 2) + (coord.y * (DISPLAY_WIDTH / 2) as i32)) as usize;
+            let old_val = self.buffer[index];
+            let new_val: u8 = if coord.x % 2 == 0 {
+                update_upper_half(old_val, color.luma())
+            } else {
+                update_lower_half(old_val, color.luma())
+            };
+            if new_val != old_val {
+                self.buffer[index] = new_val;
+            }
         }
-
         Ok(())
     }
 
@@ -112,7 +119,8 @@ impl<DI> DrawTarget<Gray4> for Ssd1327<DI> {
         self.buffer.fill(byte);
         Ok(())
     }
-
+}
+impl<DI> OriginDimensions for Ssd1327<DI> {
     fn size(&self) -> Size {
         Size::new(DISPLAY_WIDTH as u32, DISPLAY_HEIGHT as u32)
     }
