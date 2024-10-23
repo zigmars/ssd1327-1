@@ -57,10 +57,8 @@ use embedded_hal_bus::spi::ExclusiveDevice;
 fn main() -> ! {
     let mut pac = pac::Peripherals::take().unwrap();
     let _core = pac::CorePeripherals::take().unwrap();
-
     // Set up the watchdog driver - needed by the clock setup code
     let mut watchdog = hal::Watchdog::new(pac.WATCHDOG);
-
     // Configure the clocks
     let clocks = hal::clocks::init_clocks_and_plls(
         XTAL_FREQ_HZ,
@@ -73,12 +71,10 @@ fn main() -> ! {
     )
     .ok()
     .unwrap();
-
     // let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
 
     // The single-cycle I/O block controls our GPIO pins
     let sio = hal::Sio::new(pac.SIO);
-
     // Set the pins to their default state
     let pins = hal::gpio::Pins::new(
         pac.IO_BANK0,
@@ -89,53 +85,53 @@ fn main() -> ! {
 
 
 
-
-
-
-
-
-
-
     // Configure gpio
-    // let spi = Spi::new(Bus::Spi0, SlaveSelect::Ss0, 16_000_000, Mode::Mode0).unwrap();
-    // let gpio = Gpio::new().unwrap();
-    // let cs = gpio.get(8).unwrap().into_output();
-    let dc = pins.gpio5.into_push_pull_output();
-    let mut rst = pins.gpio6.into_push_pull_output();
-
-    // Init SPI
-    // let cs = pins.gpio1.into_function::<FunctionSpi>();
-    let cs = pins.gpio1.into_push_pull_output();
-
     let sclk = pins.gpio2.into_function::<FunctionSpi>();
     let mosi = pins.gpio3.into_function::<FunctionSpi>();
-
-    // let spiBus = SpiBus::new(pac.SPI0);
-    let spi = Spi::</*hal::spi::Disabled*/ _, _, _, 8>::new(
-        pac.SPI0, (mosi, sclk))
-        .init(&mut pac.RESETS, 125u32.MHz(), 16u32.MHz(), embedded_hal::spi::MODE_0);
-    let spi_dev = ExclusiveDevice::new_no_delay(spi, cs).unwrap();
-    let spii = SpiInterface::new(spi_dev, dc);
-    let mut disp = ssd1327::display::Ssd1327::new(spii);
-
+    let mut rst = pins.gpio4.into_push_pull_output();
+    let dc = pins.gpio5.into_push_pull_output();
+    let cs = pins.gpio6.into_push_pull_output();
+    // Init SPI
+    let spi = Spi::<_, _, _, 8>::new(
+        pac.SPI0, (mosi, sclk)
+    ).init(&mut pac.RESETS, 125u32.MHz(), 16u32.MHz(), embedded_hal::spi::MODE_0);
     let mut timer = hal::timer::Timer::new(pac.TIMER, &mut pac.RESETS, &clocks);
+    let spi_dev = ExclusiveDevice::new(spi, cs, timer).unwrap();
+    let spi_iface = SpiInterface::new(spi_dev, dc);
+    let mut disp = ssd1327::display::Ssd1327::new(spi_iface);
     // Reset & init
     disp.reset(&mut rst, &mut timer).unwrap();
     disp.init().unwrap();
-
     // Clear the display
     disp.clear(Gray4::new(0)).unwrap();
     disp.flush().unwrap();
 
-    // Write "Hello" to the display
-    Text::new("Hello", Point::new(0, 0), MonoTextStyle::new(&ascii::FONT_10X20, Gray4::new(0x0f))
-            // background_color : Some(Gray4::new(0x00)),
-            // strikethrough_color: DecorationColor::Custom(Gray4::new(0x80)),
-            // underline_color: DecorationColor::Custom(Gray4::new(0xa0)),
-    )
-        .draw(&mut disp)
-        .unwrap();
-            // )
+    for r in 0..16 {
+        for c in 0..32 {
+            disp.draw_pixel(
+                Pixel(Point::new(4*c, 4*r), Gray4::new(0x1))
+            );
+        }
+    }
+    for r in 0..16 {
+        for c in 0..32 {
+            disp.draw_pixel(
+                Pixel(Point::new(c, 32+r), Gray4::new((c as u8) % 16u8))
+            );
+        }
+    }
+    Text::new(
+        "Hello OLED!",
+        Point::new(8, 16),
+        MonoTextStyle::new(&ascii::FONT_10X20, Gray4::new(0x0f))
+    ).draw(&mut disp)
+    .unwrap();
     disp.flush().unwrap();
-    panic!()
+    // sleep somehow please()
+    use ssd1327::command::Command;
+    disp.send_command(Command::Contrast(0xff)).unwrap();
+    disp.send_command(Command::ComVoltageLevel(0x03)).unwrap();
+    loop {
+    }
+    // panic!()
 }

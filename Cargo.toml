@@ -6,7 +6,7 @@ version = "0.2.0"
 authors = ["Michael Nitschinger <michael@nitschinger.at>"]
 edition = "2021"
 categories = ["embedded", "no-std"]
-description = "I2C driver for the SSD1327 OLED display controller"
+description = "SPI driver for the SSD1327 OLED display controller"
 documentation = "https://docs.rs/ssd1327"
 keywords = ["no-std", "ssd1327", "oled", "embedded", "embedded-hal-driver"]
 license = "MIT OR Apache-2.0"
@@ -16,13 +16,13 @@ repository = "https://github.com/daschl/ssd1327"
 runner = "probe-run --chip RP2040"
 
 [dependencies]
-display-interface = "0.5.0"
+display-interface = "0.5"
+display-interface-spi = "0.5"
+fugit = "0.3.7"
 embedded-graphics = "0.8.1"
 # embedded-hal = "1.0.0"
 # rppal = { version = "0.12", features = [ "hal" ] }
-display-interface-spi = "0.5"
 # linux-embedded-hal = "0.3.0"
-fugit = "0.3.7"
 
 # [dev-dependencies]
 # rp2040-hal = "0.10"
